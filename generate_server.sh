@@ -15,7 +15,7 @@ generate_server() {
     make_headless_linux
     make_headless_windows
     move_server_files
-    clean_up_installer "$neoforge_version"
+    clean_server_directory "$neoforge_version"
 
     for mod_id in "${mod_ids[@]}"; do
         download_mod "$mod_id" "server/mods"
@@ -26,7 +26,7 @@ accept_eula() {
     echo "eula=true" > eula.txt
 }
 
-clean_up_installer() {
+clean_server_directory() {
     local version=$1
 
     rm neoforge-$version-installer.jar*

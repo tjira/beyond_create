@@ -17,13 +17,14 @@ generate_modpack() {
 }
 
 append_mod_info_to_manifest() {
-    local mod_version_id=$1
+    local mod_id=$1
 
-    filename=$(get_mod_filename "$mod_version_id")
-    sha1=$(get_mod_sha1 "$mod_version_id")
-    sha512=$(get_mod_sha512 "$mod_version_id")
-    size=$(get_mod_size "$mod_version_id")
-    url=$(get_mod_url "$mod_version_id")
+    api_response=$(get_mod_api_response "$mod_id")
+    filename=$(get_mod_filename "$api_response")
+    sha1=$(get_mod_sha1 "$api_response")
+    sha512=$(get_mod_sha512 "$api_response")
+    size=$(get_mod_size "$api_response")
+    url=$(get_mod_url "$api_response")
 
     jq '.files += [{
         "path" : "mods/'$filename'",
