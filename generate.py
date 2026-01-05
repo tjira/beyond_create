@@ -34,12 +34,7 @@ MODRINTH_INDEX = {
 }
 
 def downloadFile(url, dest):
-    response = requests.get(url, stream=True)
-
-    with open(dest, "wb") as file:
-        for chunk in response.iter_content(chunk_size=8192):
-            if chunk:
-                file.write(chunk)
+    with open(dest, "wb") as file: file.write(requests.get(url).content)
 
 def executeCommand(command):
     subprocess.Popen(command, shell=True).communicate()
@@ -64,6 +59,9 @@ def generateModEntry(mod_metadata):
         "fileSize": mod_metadata["files"][0]["size"]
     }
 
+def writeToFile(filename, content):
+    with open(filename, "w") as file: file.write(content + "\n")
+
 if __name__ == "__main__":
     if os.path.exists("server"): shutil.rmtree("server")
 
@@ -73,9 +71,9 @@ if __name__ == "__main__":
     downloadFile(NEOFORGE_URL, "neoforge.jar")
     executeCommand(f"java -jar neoforge.jar --installServer")
 
-    open("eula.txt", "w").write("eula=true\n")
-    open("user_jvm_args.txt", "w").write(f"-Xmx{SERVER_MEMORY}\n")
-    open("server.properties", "w").write(f"motd={MODPACK_NAME} NeoForge Server\n")
+    writeToFile("eula.txt", "eula=true")
+    writeToFile("user_jvm_args.txt", f"-Xmx{SERVER_MEMORY}")
+    writeToFile("server.properties", f"motd={MODPACK_NAME} NeoForge Server")
 
     os.remove("neoforge.jar")
     os.remove("neoforge.jar.log")
