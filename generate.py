@@ -6,22 +6,24 @@ MODPACK_NAME = "Beyond Create"
 MINECRAFT_VERSION = "1.21.1"
 NEOFORGE_VERSION = "21.1.217"
 MODPACK_VERSION = "0.1.0"
-SERVER_MEMORY = "4G"
 
 NEOFORGE_URL = f"https://maven.neoforged.net/releases/net/neoforged/neoforge/{NEOFORGE_VERSION}/neoforge-{NEOFORGE_VERSION}-installer.jar"
 
-MOD_IDS_SERVER = {
-    "Rhino": "ZdLtebKH",
-    "KubeJS": "8nuqyxbw",
+MOD_IDS = {
     "AppleSkin": "kztxpjAA",
+    "KubeJS": "8nuqyxbw",
+    "Rhino": "ZdLtebKH",
 }
 
+MOD_IDS_SERVER = {
+} | MOD_IDS
+
 MOD_IDS_CLIENT = {
-    "Sodium": "Pb3OXVqC",
-    "Xaero's World Map": "xUpTkg0V",
-    "Xaero's Minimap": "puXrtfcK",
     "Iris": "t3ruzodq",
-}
+    "Sodium": "Pb3OXVqC",
+    "Xaero's Minimap": "puXrtfcK",
+    "Xaero's World Map": "xUpTkg0V",
+} | MOD_IDS
 
 MODPACK_FILENAME = f"{MODPACK_NAME.lower().replace(' ', '_')}_MC{MINECRAFT_VERSION}_v{MODPACK_VERSION}_client.mrpack"
 
@@ -115,12 +117,15 @@ if __name__ == "__main__":
     parser.add_argument("--client", action="store_true", help="Generate the client modpack.")
     parser.add_argument("--server", action="store_true", help="Generate the server files.")
 
+    parser.add_argument("--log", type=str, default="error", help="Log level for the server.")
+    parser.add_argument("--memory", type=str, default="4G", help="Maximum memory allocation for the server.")
+
     args = parser.parse_args()
 
     def modpack(directory):
         os.makedirs(os.path.join(directory, "overrides"), exist_ok=True)
 
-        for mod in (MOD_IDS_SERVER | MOD_IDS_CLIENT).items():
+        for mod in MOD_IDS_CLIENT.items():
             MODRINTH_INDEX["files"].append(generateModEntry(getModMetadata(*mod)))
 
         open(os.path.join(directory, "modrinth.index.json"), "w").write(json.dumps(MODRINTH_INDEX, indent=4))
@@ -152,11 +157,13 @@ if __name__ == "__main__":
         writeToFile(os.path.join("server", "run.sh" ), run_lin)
         writeToFile(os.path.join("server", "run.bat"), run_win)
 
-        writeToFile(os.path.join("server", "eula.txt"         ), f"eula=true"                 )
-        writeToFile(os.path.join("server", "user_jvm_args.txt"), f"-Xmx{SERVER_MEMORY}"       )
-        writeToFile(os.path.join("server", "server.properties"), f"motd={MODPACK_NAME} Server")
+        writeToFile(os.path.join("server", "eula.txt"         ), f"eula=true"                                                 )
+        writeToFile(os.path.join("server", "user_jvm_args.txt"), f"-Xmx{args.memory} -Dforge.logging.console.level={args.log}")
+        writeToFile(os.path.join("server", "server.properties"), f"motd={MODPACK_NAME} Server"                                )
 
         os.makedirs(os.path.join("server", "mods"), exist_ok=True)
+
+        # shutil.copytree("config", os.path.join("server", "config"))
 
     with tempfile.TemporaryDirectory() as temp: modpack(temp) if args.client else None
     with tempfile.TemporaryDirectory() as temp: mserver(temp) if args.server else None
