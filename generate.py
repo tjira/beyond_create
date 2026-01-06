@@ -3,27 +3,44 @@
 import argparse, contextlib, functools, json, logging, os, re, requests, shutil, subprocess, tempfile
 
 MODPACK_NAME = "Beyond Create"
-MINECRAFT_VERSION = "1.21.1"
-NEOFORGE_VERSION = "21.1.217"
+MINECRAFT_VERSION = "1.20.1"
+LOADER_VERSION = "0.18.4"
+INSTALLER_VERSION = "1.1.1"
 MODPACK_VERSION = "0.1.0"
 
-NEOFORGE_URL = f"https://maven.neoforged.net/releases/net/neoforged/neoforge/{NEOFORGE_VERSION}/neoforge-{NEOFORGE_VERSION}-installer.jar"
+FABRIC_URL = f"https://meta.fabricmc.net/v2/versions/loader/{MINECRAFT_VERSION}/{LOADER_VERSION}/{INSTALLER_VERSION}/server/jar"
 
 MOD_IDS = {
-    "AppleSkin": "kztxpjAA",
-    "KubeJS": "8nuqyxbw",
-    "Rhino": "ZdLtebKH",
+    "Xaero's Minimap" : "6MQBeVDz",
+    "Xaero's World Map" : "qNqsa3I3",
+    "AppleSkin" : "xcauwnEB",
+    "Fabric API" : "UapVHwiP",
+    "TerraBlender" : "J1S3aA8i",
+    "Biomes O' Plenty" : "eZaag2ca",
+    "GlitchCore" : "25HLOiOl",
+    "Jade" : "drol2x1P",
+    "EMI" : "VvPw7Vi5",
+    "Lithium" : "iEcXOkz4",
+    "Architectury API" : "WbL7MStR",
+    "Trinkets" : "AHxQGtuC",
 }
 
 MOD_IDS_SERVER = {
+    "Log Begone" : "IknbjT7v",
 } | MOD_IDS
 
 MOD_IDS_CLIENT = {
-    "Iris": "t3ruzodq",
-    "Sodium": "Pb3OXVqC",
-    "Xaero's Minimap": "puXrtfcK",
-    "Xaero's World Map": "xUpTkg0V",
+    "Sodium" : "OihdIimA",
+    "Iris" : "s5eFLITc",
+    "Mod Menu" : "lEkperf6",
+    "BetterF3" : "7WkFnw9F",
+    "Entity Culling" : "QFXoqZHC",
+    "ImmediatelyFast" : "AIFWhP2u",
 } | MOD_IDS
+
+SHADERS = {
+    "Complementary Shaders - Unbound" : "LXrX6oqm"
+}
 
 MODPACK_FILENAME = f"{MODPACK_NAME.lower().replace(' ', '_')}_MC{MINECRAFT_VERSION}_v{MODPACK_VERSION}_client.mrpack"
 
@@ -34,10 +51,24 @@ MODRINTH_INDEX = {
     "name": MODPACK_NAME,
     "dependencies": {
         "minecraft": MINECRAFT_VERSION,
-        "neoforge": NEOFORGE_VERSION
+        "fabric-loader": LOADER_VERSION
     },
     "files": []
 }
+
+CLIENT_OPTIONS = [
+    f"fullscreen:true",
+    f"guiScale:2",
+    f"renderDistance:16",
+    f"simulationDistance:16",
+]
+
+SERVER_PROPERTIES = [
+    f"motd=Welcome to the {MODPACK_NAME} Fabric Server!",
+    f"view-distance=16",
+    f"simulation-distance=16",
+    f"gamemode=creative",
+]
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(message)s")
 
@@ -117,56 +148,42 @@ if __name__ == "__main__":
     parser.add_argument("--client", action="store_true", help="Generate the client modpack.")
     parser.add_argument("--server", action="store_true", help="Generate the server files.")
 
-    parser.add_argument("--log", type=str, default="error", help="Log level for the server.")
     parser.add_argument("--memory", type=str, default="4G", help="Maximum memory allocation for the server.")
 
     args = parser.parse_args()
 
     def modpack(directory):
-        os.makedirs(os.path.join(directory, "overrides"), exist_ok=True)
+        os.makedirs(os.path.join(directory, "overrides", "shaderpacks"), exist_ok=True)
 
         for mod in MOD_IDS_CLIENT.items():
             MODRINTH_INDEX["files"].append(generateModEntry(getModMetadata(*mod)))
 
-        open(os.path.join(directory, "modrinth.index.json"), "w").write(json.dumps(MODRINTH_INDEX, indent=4))
+        for shader in SHADERS.items():
+            downloadMod(getModMetadata(*shader), os.path.join(directory, "overrides", "shaderpacks"))
+
+        writeToFile(os.path.join(directory, "modrinth.index.json"     ), json.dumps(MODRINTH_INDEX, indent=4))
+        writeToFile(os.path.join(directory, "overrides", "options.txt"), "\n".join(CLIENT_OPTIONS)           )
 
         archiveFolder(directory, MODPACK_FILENAME)
 
     def mserver(directory):
-        if os.path.isdir(os.path.join("server")): return
-
-        downloadFile(NEOFORGE_URL, os.path.join(directory, "neoforge.jar"))
-
-        executeCommand(f"java -jar {os.path.join(directory, 'neoforge.jar')} --installServer {directory}")
-
-        os.remove("neoforge.jar.log")
-
         os.makedirs("server", exist_ok=True)
 
-        shutil.move(os.path.join(directory, "libraries"), os.path.join("server", "libraries"))
+        downloadFile(FABRIC_URL, os.path.join("server", "server.jar"))
 
-        shutil.move(os.path.join(directory, "run.bat"  ), os.path.join("server", "run.bat"  ))
-        shutil.move(os.path.join(directory, "run.sh"   ), os.path.join("server", "run.sh"   ))
+        writeToFile(os.path.join("server", "run.sh" ), f"java -Xmx{args.memory} -jar server.jar nogui")
 
-        run_lin = filterLines(readFile(os.path.join("server", "run.sh" )), "#"  ).strip()
-        run_win = filterLines(readFile(os.path.join("server", "run.bat")), "REM").strip()
+        os.chmod(os.path.join("server", "run.sh"), 0o755)
 
-        run_win = "\n".join([line + (" nogui" if i == 1 and "nogui" not in line else "") for i, line in enumerate(run_win.split("\n"))])
-        run_lin = "\n".join([line + (" nogui" if i == 0 and "nogui" not in line else "") for i, line in enumerate(run_lin.split("\n"))])
-
-        writeToFile(os.path.join("server", "run.sh" ), run_lin)
-        writeToFile(os.path.join("server", "run.bat"), run_win)
-
-        writeToFile(os.path.join("server", "eula.txt"         ), f"eula=true"                                                 )
-        writeToFile(os.path.join("server", "user_jvm_args.txt"), f"-Xmx{args.memory} -Dforge.logging.console.level={args.log}")
-        writeToFile(os.path.join("server", "server.properties"), f"motd={MODPACK_NAME} Server"                                )
+        writeToFile(os.path.join("server", "eula.txt"         ), f"eula=true"                )
+        writeToFile(os.path.join("server", "server.properties"), "\n".join(SERVER_PROPERTIES))
 
         os.makedirs(os.path.join("server", "mods"), exist_ok=True)
 
-        # shutil.copytree("config", os.path.join("server", "config"))
+        for mod in (item for item in MOD_IDS_SERVER.items() if args.server):
+            downloadMod(getModMetadata(*mod), os.path.join("server", "mods"))
+
+        shutil.copytree("config", os.path.join("server", "config"), dirs_exist_ok=True)
 
     with tempfile.TemporaryDirectory() as temp: modpack(temp) if args.client else None
     with tempfile.TemporaryDirectory() as temp: mserver(temp) if args.server else None
-
-    for mod in (item for item in MOD_IDS_SERVER.items() if args.server):
-        downloadMod(getModMetadata(*mod), os.path.join("server", "mods"))
